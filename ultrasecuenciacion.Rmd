@@ -1,0 +1,156 @@
+---
+title: "PEC2-Análisis de Datos de Ultrasecuenciación"
+subtitle: "Análisis de Datos Ómicos"
+author: "Alba Moya Garcés"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+output: 
+  pdf_document:
+    toc: yes
+    toc_depth: 4
+    fig_caption: yes
+urlcolor: blue
+language: es
+nocite: |
+  @*
+bibliography: biblio_PEC2.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment=FALSE, cache=TRUE, warning=FALSE, message=FALSE, fig.width = 7, fig.height = 7, fig.cap = TRUE)
+```
+
+
+```{r require_packages}
+require(rstudioapi)
+
+```
+
+#Pipeline
+
+1. Definición de los datos tal como se ha descrito en el párrafo anterior
+2. Preprocesado de los datos: filtraje y normalización
+3. Identificación de genes diferencialmente expresados
+4. Anotación de los resultados
+5. Busca de patrones de expresión y agrupación de las muestras (comparación entre las
+distintas comparaciones).
+6. Análisis de significación biológica (“Gene Enrichment Analysis”)
+
+#Abstract
+#Objetivos
+#Material
+
+El código completo para desarrollar este análisis, o cualquier otro a partir de su adaptación, puede descargarse del siguiente repositorio de *GitHub*:
+
+[https://github.com/albamgarces/analisis-de-datos-de-RNA-seq.git](https://github.com/albamgarces/analisis-de-datos-de-RNA-seq.git). 
+
+##Software
+
+
+Se realizó este análisis utilizando el lenguaje `r version$version.string` R en la interfaz RStudio versión 1.1.456 y las librerías desarrolaldas para este tipo de análisis por el proyecto Bioconductor.
+El programa estadístico R se puede descargar desde la página web del [proyecto CRAN](https://cran.r-project.org/index.html) (The Comprehensive R Archive Network) siguiendo las indicaciones.
+R-Studio puede descargarse desde su página web <https://www.rstudio.com/>.
+
+Finalmente, las librerías adicionales necesarias para llevar a cabo este análisis se obtuvieron del proyecto Bioconductor versión `r BiocManager::version()`, el cuál se instala junto con algunos paquetes básicos mediante el siguiente código:
+
+```{r BioconductorInstalling, echo=TRUE}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+     install.packages("BiocManager")
+BiocManager::install()
+```
+
+##Datos
+
+Los archivos `counts.csv` y `targets.csv`contienen la información de un estudio obtenido del repositorio del proyecto  [GTEx](https://www.gtexportal.org/home/) (Genotype-Tissue Expression). Encontramos los datos de expresión (RNA-seq) pertenecientes a un análisis del tiroide donde se comparan tres tipos de infiltración en 292 muestras:
+
+- tejidos no infiltrados (NIT): 236 muestras
+- infiltración focalizada (SFI): 42 muestras
+- infiltración linfoide extensiva (ELI): 14 muestras
+
+
+
+#Métodos
+
+## Preparación del área de trabajo:
+
+Para llevar a cabo el análisis, se debe gestionar una gran cantidad de archivos entre aquesllos que ocupan los datos originales y los generados durante su análisis. Es por ello que siempre se debería comenzar creando als carpetas necesarias para simplificar la ruta de trabajo. Se recomienda generar una **carpeta principal** con el nombre de nuestro proyecto en cuyo interior alojaremos una carpeta con los archivos de **datos** y otra con los **resultados** generados del análisis
+
+Estas carpetas las genereamos rápidamente desde el explorador de archivos o la consola de cualquiera de los sistemas operativos usuales. Desde R también podemos generar estas subcarpetas mediante el siguiente código:
+
+
+```{r Carpetas, eval=FALSE, echo=TRUE}
+setwd(".")
+dir.create("data")
+dir.create("results")
+```
+
+
+
+##Instalación de paquetes en R
+
+A continuación se muestran los paquetes necesarios fpara este estudio que requieren instalación:
+
+```{r instalacionPaquetes, echo=TRUE}
+# UNCOMMENT IF INSTALL REQUIRES
+##install.packages("readr")
+##install.packages("sampling")
+# install.packages("knitr")
+#install.packages("cluster")
+# install.packages("gplots")
+# install.packages("ggplot2")
+# install.packages("ggrepel")
+# install.packages("BiocManager")
+# BiocManager::install("oligo")
+# BiocManager::install("arrayQualityMetrics")
+# BiocManager::install("pvca")
+# BiocManager::install("pacman")
+# BiocManager::install("geneplotter")
+# BiocManager::install("org.Dm.eg.db")
+# BiocManager::install("limma")
+# BiocManager::install("genefilter")
+# BiocManager::install("drosophila2.db")
+# BiocManager::install("ReactomePA")
+```
+
+##Lectura y selección de los datos
+
+Importamos los archivos proporcionados a R. 
+El archivo `targets` contiene las 292 muestras identificadas por un número según sean provenientes de tejidos NIT (1), SFI (2) o ELI (3).
+
+```{r read_targets}
+targets <- read.csv("data/targets.csv", head=T)
+kable(head(targets[,c(3,4,6,7,8)]))
+```
+
+El archivo `counts` contempla las 292 muestras como variables y nos informa del número de veces que se ha detectado cada uno de los 56202 genes identificados en la primera columna. 
+
+```{r read_counts, fig.cap= "Fragmento de la tabla de datos count"}
+counts <- read.csv2("data/counts.csv", head=T, row.names = 1)
+kable(head(counts[,1:2]), caption = "Fragmento de la tabla de datos `count`")
+```
+
+Con el fin de simplificar el análisis, se decidió seleccionar aleatoriamente 10 muestras de cada tipo de tejido.
+
+```{r}
+library(sampling)
+library(knitr)
+set.seed(1234)
+selected <- strata(targets, c("Group"), size=c(10,10,10), method = "srswor")
+muestreo <- getdata(targets, selected)
+muestreo <- muestreo[,1:10]
+
+kable(muestreo[,c(3,6,7,9)])
+```
+
+```{r seleccion_muestras}
+targets_NIT <- targets[targets$Group=="NIT",]
+```
+
+
+##Control de calidad de los datos
+
+
+
+
+#Resultados
+#Discusión
+#Bibliografía
