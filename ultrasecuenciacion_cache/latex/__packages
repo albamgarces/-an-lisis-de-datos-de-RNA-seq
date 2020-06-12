@@ -2,3 +2,5 @@ base
 rstudioapi
 sampling
 knitr
+reshape2
+ggplot2

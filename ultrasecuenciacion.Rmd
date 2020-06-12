@@ -8,8 +8,8 @@ output:
     toc: yes
     toc_depth: 4
     fig_caption: yes
+    number_sections: true
 urlcolor: blue
-language: es
 nocite: |
   @*
 bibliography: biblio_PEC2.bib
@@ -90,13 +90,14 @@ dir.create("results")
 A continuación se muestran los paquetes necesarios fpara este estudio que requieren instalación:
 
 ```{r instalacionPaquetes, echo=TRUE}
+#para que salgan los que están en curso: (.packages())
 # UNCOMMENT IF INSTALL REQUIRES
 ##install.packages("readr")
 ##install.packages("sampling")
-# install.packages("knitr")
+## install.packages("knitr")
 #install.packages("cluster")
 # install.packages("gplots")
-# install.packages("ggplot2")
+## install.packages("ggplot2")
 # install.packages("ggrepel")
 # install.packages("BiocManager")
 # BiocManager::install("oligo")
@@ -111,6 +112,10 @@ A continuación se muestran los paquetes necesarios fpara este estudio que requi
 # BiocManager::install("ReactomePA")
 ```
 
+```{r required_packages}
+kable(.packages())
+```
+
 ##Lectura y selección de los datos
 
 Importamos los archivos proporcionados a R. 
@@ -118,7 +123,7 @@ El archivo `targets` contiene las 292 muestras identificadas por un número seg�
 
 ```{r read_targets}
 targets <- read.csv("data/targets.csv", head=T)
-kable(head(targets[,c(3,4,6,7,8)]))
+kable(head(targets[,c(3,4,6,7,8)]), caption = "Fragmento de la tabla de datos `targets`")
 ```
 
 El archivo `counts` contempla las 292 muestras como variables y nos informa del número de veces que se ha detectado cada uno de los 56202 genes identificados en la primera columna. 
@@ -128,25 +133,101 @@ counts <- read.csv2("data/counts.csv", head=T, row.names = 1)
 kable(head(counts[,1:2]), caption = "Fragmento de la tabla de datos `count`")
 ```
 
-Con el fin de simplificar el análisis, se decidió seleccionar aleatoriamente 10 muestras de cada tipo de tejido.
+Con el fin de simplificar el análisis, se decidió seleccionar aleatoriamente 10 muestras de cada tipo de tejido. El código para realizar esta estracción es el que se indica a caontinuación.
 
-```{r}
+```{r select_samples, echo=TRUE}
 library(sampling)
 library(knitr)
+#selección de muestras en el archivo targets
 set.seed(1234)
 selected <- strata(targets, c("Group"), size=c(10,10,10), method = "srswor")
 muestreo <- getdata(targets, selected)
 muestreo <- muestreo[,1:10]
-
-kable(muestreo[,c(3,6,7,9)])
 ```
 
-```{r seleccion_muestras}
-targets_NIT <- targets[targets$Group=="NIT",]
+```{r selected_table}
+kable(muestreo[,c(3,6,7,9)], caption = "Selección de diez muestras de cada tipo")
 ```
 
+
+```{r select_count, echo=TRUE}
+#selección de muestras en el archivo counts
+count_subset <- counts[, c(muestreo$ID_unit)]
+```
+
+
+
+```{r counts_selected_table}
+condition <- c("NIT","NIT","NIT","NIT","NIT","NIT","NIT","NIT","NIT", "NIT","ELI","ELI","ELI","ELI","ELI","ELI","ELI","ELI","ELI","ELI","SFI","SFI","SFI","SFI","SFI","SFI","SFI","SFI","SFI","SFI")
+colnames(count_subset)<- paste0(condition,1:10)
+kable(count_subset[1:5,1:3], caption = "Fragmento tabla counts de muestras seleccionadas")
+```
+
+
+Con los datos de conteo de estas 30 muestras seleccionadas continuaremos el resto del análisis.
 
 ##Control de calidad de los datos
+
+La evaluación de la calidad de los datos es esencial para cualquier tipo de análisis de datos. Esto nos permitirá detectar errores técnicos que puedan manifestarse en la toma de datos para poder detectar los genes expresados diferencialmente.
+
+### Transformación de los datos
+
+PAra oder explorar y visualizar los datos en su conjunto, es esencial tener todos los valores en una escala comparable. Transformaremos los datos a escala $log_2$ para normalizar las distribuciones. Se utiliza este método de transformación porque facilita su conversión a la escala original.
+
+Tal y como recomienda González (Toulouse, 2014), sumaremos 1 a cada registro de conteo para evitar los valores 0 de algunas condiciones:
+
+$$y=log_2(K+1)$$
+```{r log2}
+log2_count <- log2(count_subset+1)
+```
+
+Podemos ver el efecto de la transformación de los datos tomando de ejemplo una de las muestras
+```{r histogram,  fig.cap="Distribución de las expresiones de una de las muestras de tejido NIT. Podemos ver el efecto de la transformación de los datos mediante log(2)+1"}
+par(mfrow=c(1,2))
+hist(count_subset$NIT1, col="red", main="Distribución tejidos NIT")
+hist(log2_count$NIT1, col="blue", main="Distribución log(2)+1 tejidos NIT")
+```
+### Gráfico de densidad
+
+El gráfico de densidad de Kernel nos permitirá hacernos una idea de la similiritud entre las diferentes distribuciones.
+
+
+```{r}
+ggplot(df,aes(x=value, colour=Samples, fill =Samples))+
+  ylim(c(0, 0.25))+
+  geom_density(alpha = 0.2, size = 1.25) + 
+  facet_wrap (df$Condition) +
+  xlab(expression(log[2](counts + 1)))+
+  theme(legend.position = "none")
+```
+
+
+#### Boxplot
+
+```{r boxplot, fig.cap="Diagrama de cajas que muestran la distribución de los diferentes tipos de tejido. Se puede observar cierta heterogeneidad, sobretodo en la muestra 7 del tipo tisular NIT, pero no parece que sea sistemática ni que sea producido por muestras defectuosas."}
+require(reshape2)
+require(ggplot2)
+colores <- c(rep("yellow", 10), rep("blue", 10), rep("red", 10))
+df=melt(log2_count, variable.name = "Samples")
+df=data.frame(df, Condition=substr(df$Samples,1, 30))
+ggplot(df, aes(x=Samples, y =value, fill=Condition ))+
+  geom_boxplot()+
+  xlab("")+
+  ylab(expression(log[2](counts+1)))+
+  scale_fill_manual(values=colores)+
+  theme(legend.position = "none", axis.text = element_text(size = 5))
+```
+
+```{r boxplots, fig.cap="Diagrama de cajas que muestran la distribución de los diferentes tipos de tejido. Se puede observar cierta heterogeneidad, sobretodo en la muestra 7 del tipo tisular NIT, pero no parece que sea sistemática ni que sea producido por muestras defectuosas."}
+# 
+# par(mfrow=c(2,2))
+# boxplot(log2_count[, 1:10], col="green", main="Diagrama de cajas tejido NIT")
+# boxplot(log2_count[, 11:20], col="blue", main="Diagrama de cajas tejido ELI")
+# boxplot(log2_count[, 21:30], col="red", main="Diagrama de cajas tejido SFI")
+```
+
+
+
 
 
 
