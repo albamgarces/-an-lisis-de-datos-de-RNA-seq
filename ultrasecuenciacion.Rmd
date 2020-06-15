@@ -21,31 +21,790 @@ knitr::opts_chunk$set(echo = FALSE, comment=FALSE, cache=TRUE, warning=FALSE, me
 
 
 ```{r require_packages}
-require(rstudioapi)
-
+require(knitr)
+require(sampling)
+require(base)
+require(DESeq2)
+require(reshape2)
+require(ggplot2)
+require(RColorBrewer)
+require(mixOmics)
+require(gplots)
+require(AnnotationDbi)
+require(org.Hs.eg.db)
+require(enrichR)
 ```
 
-#Pipeline
 
-1. Definición de los datos tal como se ha descrito en el párrafo anterior
-2. Preprocesado de los datos: filtraje y normalización
-3. Identificación de genes diferencialmente expresados
-4. Anotación de los resultados
-5. Busca de patrones de expresión y agrupación de las muestras (comparación entre las
-distintas comparaciones).
-6. Análisis de significación biológica (“Gene Enrichment Analysis”)
 
-#Abstract
+#Resumen
+
+Se analizaron los datos de expresión RNAseq provenientes de un análisis del tiroides donde se comparan tres tipos de infiltración en un total de 292 muestras.
+
 #Objetivos
+
+El objetivo de este estudio es examinar las diferencias en la expresión génica de las muestras y analizar su significancia biológica.
+
 #Material
 
-El código completo para desarrollar este análisis, o cualquier otro a partir de su adaptación, puede descargarse del siguiente repositorio de *GitHub*:
+El código completo para desarrollar este análisis, o cualquier otro a partir de su adaptación, así como todos los archivos de resultados generados, puede descargarse del siguiente repositorio de *GitHub*:
 
 [https://github.com/albamgarces/analisis-de-datos-de-RNA-seq.git](https://github.com/albamgarces/analisis-de-datos-de-RNA-seq.git). 
 
 ##Software
 
 
+Se realizó este análisis utilizando el lenguaje `r version$version.string` R en la interfaz RStudio versión 1.1.456 y las librerías desarrolaldas para este tipo de análisis por el proyecto Bioconductor.
+El programa estadístico R se puede descargar desde la página web del [proyecto CRAN](https://cran.r-project.org/index.html) (The Comprehensive R Archive Network) siguiendo las indicaciones.
+R-Studio puede descargarse desde su página web <https://www.rstudio.com/>.
+
+Finalmente, las librerías adicionales necesarias para llevar a cabo este análisis se obtuvieron del proyecto Bioconductor versión `r BiocManager::version()`, el cuál se instala junto con algunos paquetes básicos mediante el siguiente código:
+
+```{r BioconductorInstalling, echo=TRUE}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+     install.packages("BiocManager")
+BiocManager::install()
+```
+
+##Datos
+
+Los archivos `counts.csv` y `targets.csv`contienen la información de un estudio obtenido del repositorio del proyecto  [GTEx](https://www.gtexportal.org/home/) (Genotype-Tissue Expression). Encontramos los datos de expresión (RNA-seq) pertenecientes a un análisis del tiroide donde se comparan tres tipos de infiltración en 292 muestras:
+
+- tejidos no infiltrados (NIT): 236 muestras
+- infiltración focalizada (SFI): 42 muestras
+- infiltración linfoide extensiva (ELI): 14 muestras
+
+
+
+#Métodos
+
+## Preparación del área de trabajo:
+
+Para llevar a cabo el análisis, se debe gestionar una gran cantidad de archivos entre aquesllos que ocupan los datos originales y los generados durante su análisis. Es por ello que siempre se debería comenzar creando als carpetas necesarias para simplificar la ruta de trabajo. Se recomienda generar una **carpeta principal** con el nombre de nuestro proyecto en cuyo interior alojaremos una carpeta con los archivos de **datos** y otra con los **resultados** generados del análisis
+
+Estas carpetas las genereamos rápidamente desde el explorador de archivos o la consola de cualquiera de los sistemas operativos usuales. Desde R también podemos generar estas subcarpetas mediante el siguiente código:
+
+
+```{r Carpetas, eval=FALSE, echo=TRUE}
+setwd(".")
+dir.create("data")
+dir.create("results")
+```
+
+
+
+##Instalación de paquetes en R
+
+A continuación se muestran los paquetes necesarios fpara este estudio que requieren instalación:
+
+
+
+```{r instalacionPaquetes, echo=TRUE}
+<<<<<<< HEAD
+
+#### UNCOMMENT IF INSTALL REQUIRES ####
+##install.packages("readr")
+##install.packages("sampling")
+## install.packages("knitr")
+##install.packages("tables")
+#install.packages("cluster")
+## install.packages("gplots")
+## install.packages("ggplot2")
+##install.packages("enrichR")
+=======
+#para que salgan los que están en curso: (.packages())
+# UNCOMMENT IF INSTALL REQUIRES
+##install.packages("readr")
+##install.packages("sampling")
+## install.packages("knitr")
+#install.packages("cluster")
+# install.packages("gplots")
+## install.packages("ggplot2")
+>>>>>>> e1199583d165c298d039188b6aab6e3de1401838
+# install.packages("ggrepel")
+## install.packages("BiocManager")
+##BiocManager::install("Biobase")
+##BiocManager::install("DESeq")
+##BiocManager::install("mixOmics")
+##BiocManager::install("AnnotationDbi")
+##BiocManager::install("org.Hs.eg.db")
+# BiocManager::install("oligo")
+# BiocManager::install("arrayQualityMetrics")
+# BiocManager::install("pvca")
+# BiocManager::install("pacman")
+# BiocManager::install("geneplotter")
+# BiocManager::install("org.Dm.eg.db")
+# BiocManager::install("limma")
+# BiocManager::install("genefilter")
+# BiocManager::install("drosophila2.db")
+# BiocManager::install("ReactomePA")
+```
+
+<<<<<<< HEAD
+
+=======
+```{r required_packages}
+kable(.packages())
+```
+>>>>>>> e1199583d165c298d039188b6aab6e3de1401838
+
+##Lectura y selección de los datos
+
+Importamos los archivos proporcionados a R. 
+El archivo `targets` contiene las 292 muestras identificadas por un número según sean provenientes de tejidos NIT (1), SFI (2) o ELI (3).
+
+```{r read_targets}
+targets <- read.csv("data/targets.csv", head=T)
+kable(head(targets[,c(3,4,6,7,8)]), caption = "Fragmento de la tabla de datos `targets`")
+```
+
+El archivo `counts` contempla las 292 muestras como variables y nos informa del número de veces que se ha detectado cada uno de los 56202 genes identificados en la primera columna. 
+
+```{r read_counts, fig.cap= "Fragmento de la tabla de datos count"}
+counts <- read.csv2("data/counts.csv", head=T, row.names = 1)
+kable(head(counts[,1:2]), caption = "Fragmento de la tabla de datos `count`")
+```
+
+Con el fin de simplificar el análisis, se decidió seleccionar aleatoriamente 10 muestras de cada tipo de tejido. El código para realizar esta estracción es el que se indica a caontinuación.
+
+```{r select_samples, echo=TRUE}
+<<<<<<< HEAD
+=======
+library(sampling)
+library(knitr)
+>>>>>>> e1199583d165c298d039188b6aab6e3de1401838
+#selección de muestras en el archivo targets
+set.seed(1234)
+selected <- strata(targets, c("Group"), size=c(10,10,10), method = "srswor")
+muestreo <- getdata(targets, selected)
+muestreo <- muestreo[,1:10]
+```
+<<<<<<< HEAD
+
+```{r selected_table}
+kable(muestreo[,c(3,6,7,9)], caption = "Selección de diez muestras de cada tipo")
+```
+
+
+```{r select_count, echo=TRUE}
+#selección de muestras en el archivo counts
+count_subset <- counts[, c(muestreo$ID_unit)]
+```
+
+
+
+```{r counts_selected_table}
+condition <- c("NIT","NIT","NIT","NIT","NIT","NIT","NIT","NIT","NIT", "NIT","ELI","ELI","ELI","ELI","ELI","ELI","ELI","ELI","ELI","ELI","SFI","SFI","SFI","SFI","SFI","SFI","SFI","SFI","SFI","SFI")
+colnames(count_subset)<- paste0(condition,1:10)
+kable(count_subset[1:5,1:3], caption = "Fragmento tabla counts de muestras seleccionadas")
+```
+
+
+Con los datos de conteo de estas 30 muestras seleccionadas continuaremos el resto del análisis.
+
+
+## Objeto DESeqDataSet
+
+Preparamos el objeto DESeqDataSet necesario para parte del análisis de los datos.
+Creamos la tabla de metadatos del experimento que nos permitirá trabajar con las funciones de `Bioconductor`más fácilmente.
+
+
+```{r del_version, echo=TRUE}
+#eliminamos el número de versión de los genes
+rownames(count_subset)<- gsub("\\.[0-9]*$", "", rownames(count_subset))
+```
+
+```{r metadata, echo=TRUE}
+samples<-colnames(count_subset)
+ID_unit<-selected$ID_unit
+Sex <- muestreo$sex
+Group<- selected$Group
+experiment.metadata<-data.frame(ID_unit, Group, Sex)
+experiment.metadata$Group<-as.factor(experiment.metadata$Group)
+rownames(experiment.metadata)<-samples
+```
+
+
+
+```{r DESseq, echo=TRUE}
+dds<-DESeqDataSetFromMatrix(countData = count_subset, 
+                            colData = muestreo, 
+                            design = ~ Group)
+dds
+
+```
+
+## Transformación de los datos
+
+Para oder explorar y visualizar los datos en su conjunto, es esencial tener todos los valores en una escala comparable. Transformaremos los datos a escala $log_2$ para normalizar las distribuciones. Se utiliza este método de transformación porque facilita su conversión a la escala original.
+
+Tal y como recomienda González (Toulouse, 2014), sumaremos 1 a cada registro de conteo para evitar los valores 0 de algunas condiciones:
+
+$$y=log_2(K+1)$$
+```{r log2}
+log2_count <- log2(count_subset+1)
+rld <- rlog(dds)
+```
+
+La transformación logarítmica nos sirve para que los valores de conteo más pequeños se aproximen hacia la media de expresión de todos los genes, obteniendo unos datos transformados aproximadamente homocedásticos, con varianzas no distintas significativamente.
+Podemos ver el efecto de la transformación de los datos tomando de ejemplo una de las muestras. En la figura 1 observamos como los datos transformados permiten apreciar las posibles diferencias entre las muestras.
+
+```{r histogram,  fig.cap="Distribución de las expresiones de una de las muestras de tejido NIT. Podemos ver el efecto de la transformación de los datos mediante log(2)+1"}
+par(mfrow=c(1,2))
+hist(count_subset$NIT1, col="red", main="Distribución tejidos NIT")
+hist(log2_count$NIT1, col="blue", main="Distribución log(2)+1 tejidos NIT")
+=======
+
+```{r selected_table}
+kable(muestreo[,c(3,6,7,9)], caption = "Selección de diez muestras de cada tipo")
+```
+
+
+```{r select_count, echo=TRUE}
+#selección de muestras en el archivo counts
+count_subset <- counts[, c(muestreo$ID_unit)]
+```
+
+
+
+```{r counts_selected_table}
+condition <- c("NIT","NIT","NIT","NIT","NIT","NIT","NIT","NIT","NIT", "NIT","ELI","ELI","ELI","ELI","ELI","ELI","ELI","ELI","ELI","ELI","SFI","SFI","SFI","SFI","SFI","SFI","SFI","SFI","SFI","SFI")
+colnames(count_subset)<- paste0(condition,1:10)
+kable(count_subset[1:5,1:3], caption = "Fragmento tabla counts de muestras seleccionadas")
+>>>>>>> e1199583d165c298d039188b6aab6e3de1401838
+```
+
+
+Con los datos de conteo de estas 30 muestras seleccionadas continuaremos el resto del análisis.
+
+##Control de calidad de los datos
+
+La evaluación de la calidad de los datos es esencial para cualquier tipo de análisis de datos. Esto nos permitirá detectar errores técnicos que puedan manifestarse en la toma de datos para poder detectar los genes expresados diferencialmente.
+
+<<<<<<< HEAD
+Una primera aproximación para verificar la calidad de nuestros datos es comparar las distintas muestras entre sí, pudiendo comprobar si aquellas pertenecientes al mismo grupo presentan más similitudes entre sí que con otros grupos.
+
+### Gráfico de densidad
+
+El gráfico de densidad de Kernel (figura 2) nos permitirá hacernos una idea de la similiritud entre las diferentes distribuciones, las cuales no indican la presencia de ninguna muestra defectuosa, con la salvedad de una de las muestras ELI que parece seguir una distribución diferente a la del resto. 
+
+
+```{r densidad, fig.cap="Curvas de densidad de la expresión de los genes de las diferentes muestras separadas por grupos."}
+df=melt(log2_count, variable.name = "Samples")
+df=data.frame(df, Condition=c(rep("NIT",562020), rep("ELI",562020), rep("SFI",562020)))
+ggplot(df,aes(x=value, colour=Samples))+
+  ylim(c(0, 0.25))+
+  geom_density(alpha = 0.2, size = 1.25) + 
+  facet_wrap (~Condition) +
+=======
+### Transformación de los datos
+
+PAra oder explorar y visualizar los datos en su conjunto, es esencial tener todos los valores en una escala comparable. Transformaremos los datos a escala $log_2$ para normalizar las distribuciones. Se utiliza este método de transformación porque facilita su conversión a la escala original.
+
+Tal y como recomienda González (Toulouse, 2014), sumaremos 1 a cada registro de conteo para evitar los valores 0 de algunas condiciones:
+
+$$y=log_2(K+1)$$
+```{r log2}
+log2_count <- log2(count_subset+1)
+```
+
+Podemos ver el efecto de la transformación de los datos tomando de ejemplo una de las muestras
+```{r histogram,  fig.cap="Distribución de las expresiones de una de las muestras de tejido NIT. Podemos ver el efecto de la transformación de los datos mediante log(2)+1"}
+par(mfrow=c(1,2))
+hist(count_subset$NIT1, col="red", main="Distribución tejidos NIT")
+hist(log2_count$NIT1, col="blue", main="Distribución log(2)+1 tejidos NIT")
+```
+### Gráfico de densidad
+
+El gráfico de densidad de Kernel nos permitirá hacernos una idea de la similiritud entre las diferentes distribuciones.
+
+
+```{r}
+ggplot(df,aes(x=value, colour=Samples, fill =Samples))+
+  ylim(c(0, 0.25))+
+  geom_density(alpha = 0.2, size = 1.25) + 
+  facet_wrap (df$Condition) +
+>>>>>>> e1199583d165c298d039188b6aab6e3de1401838
+  xlab(expression(log[2](counts + 1)))+
+  theme(legend.position = "none")
+```
+
+
+#### Boxplot
+
+<<<<<<< HEAD
+El diagrama de cajas también no mostrará la distribución de las intensidades, en la figura 3 se pueden apreciar pequeñas variaciones esperables en los datos normalizados. Podemos destacar la muestra ELI7 que presenta una distribución de la intensidad de expresión de los genes que parece diferente a la del resto del grupo.
+
+
+```{r boxplot, fig.cap="Diagrama de cajas que muestran la distribución de los diferentes tipos de tejido. Se puede observar cierta heterogeneidad, sobretodo en la muestra 7 del tipo tisular NIT, pero no parece que sea sistemática ni que sea producido por muestras defectuosas."}
+
+ggplot(df, aes(x=Samples, y =value, fill=Condition))+
+  geom_boxplot()+
+  xlab("")+
+  ylab(expression(log[2](counts+1)))+
+  
+  theme(legend.position = "none", axis.text = element_text(size = 5))
+```
+
+
+
+### Análisis de Componentes Principales
+
+Mediante el análisis de componentes principales (ACP) podemos detectar si las muestras se agrupan entre otras muestras del mismo grupo o si no hay una clara correspondencia entre ellas. Que las muestras no se agrupen por "familias" podría ser debido al efecto *batch* por defectos técnicos. 
+El principal objetivo del ACP es reducir las dimensiones del conjunto de datos y poder determinar las características clave de los diferentes grupos. Teniendo en cuenta que nuestros datos están agrupados en tres grupos, correspondientes a los tres tipos de tejido, cabe esperar una clara diferenciación en las componentes.
+
+Observando en el gráfico ACP de la figura 4, la distribución de las dos primeras componentes de la expresión de cada gen sobre cada muestra no permite observar una clara separación en el espacio bidimensional definido por las dos primeras componentes de las muestras en los tres grupos.
+
+Hay que tener en cuenta que estas dos componentes principales no llegan a explicar el 70% de la variabilidad, pero aún así podemos apreciar que las muestras ELI se comportan de forma diferente a las SFI o NIT, salvo algúna muestra que se sale del patrón (ELI6, SFI5 y SFI9). Esto no tiene por qué interpretarse como un problema en la calidad de los datos.
+
+
+```{r plot_ACP, fig.cap="Dos primeras componentes principales de los datos transformados utilizando como variables la expresión de los genes en las muestras"}
+plotPCA(rld, intgroup = c("Group"))
+```
+
+
+
+### Clúster Jerárquico
+
+Otra forma de asegurarnos que las muestra se agrupan según los grupos experimentales, es mediante un clúster jerárquico que nos agrupa las muestras por grado de similaridad. Mediante un dendograma, se va mostrando a qué valor se produce la unión de los grupos y qué grupos se unen. Si las muestras se unen por condiciones experimentales, es un buen indicador de la calidad de las mismas, si no, no es necesariamente reflejo de algún problema.
+
+En el caso de los datos del experimento, en la figura 5 encontramos una tendenciá de las muestras a agruparse y situarse cercanas a muestras de us mismo grupo, pero hay algunos caso en los que no es así.
+
+```{r heatmap, fig.cap="Mapa de colores (heatmap) y dendograma de las distancias euclídeas entre las distintas muestras."}
+mat.dist <- as.matrix(dist(t(log2_count)))
+mat.dist <- mat.dist/max(mat.dist)
+hmcol <- colorRampPalette(brewer.pal(9, "Blues"))(15)
+heatmap.2(mat.dist, trace = "none", col = hmcol, cexRow = 0.5)
+```
+
+
+##Filtraje no específico de datos
+
+El filtraje no específico nos permite realizar una criba de genes con poca variabilidad entre las condiciones o con otra característica que lleve a que nos interese eliminarlos.
+
+Una forma de realizar este filtrado es eliminando aquellos con un recuento total de lecturas menor a un umbral dado.
+
+```{r filtraje_noesp}
+#mantenemos los genes expresados en al menos una muestra
+keep <- rowSums(count_subset) > 0
+filtCount <- log2_count[keep,]
+```
+
+Reducimos a 46707 genes disponibles para analizar.
+
+
+```{r DESeqDataSet_filtered}
+count_subset_filt <- count_subset[keep,]
+dds_filt <-DESeqDataSetFromMatrix(countData = count_subset_filt, 
+                            colData = muestreo, 
+                            design = ~ Group)
+dds_filt
+```
+
+
+
+```{r boxplot_filt, fig.cap="Diagrama de cajas de la distribución de los datos tras el filtrado de genes con baja expresión. Podemos ver que apenas varía el patrón, aunque sí que mejran las medias de aquellas muestras conflictivas antes del filtrado."}
+df_filt=melt(filtCount, variable.name = "Samples")
+df_filt=data.frame(df_filt, Condition=c(rep("NIT",467070), rep("ELI",467070), rep("SFI",467070)))
+
+ggplot(df_filt, aes(x=Samples, y =value, fill=Condition))+
+  geom_boxplot()+
+  xlab("")+
+  ylab(expression(log[2](counts+1)))+
+  theme(legend.position = "none", axis.text = element_text(size = 5))
+```
+
+
+##Análisis de Expresión Diferencial
+
+La función `DESeq2`, además de filtrar los genes cuya expresión no se ha detectado, nos permite también eliminar del análisis aquellos genes con una expresión especialmente baja, lo que nos facilita la tarea a la hora de realizar las comparaciones entre los grupos.
+
+```{r DESeq, echo=TRUE}
+dds_filt <- DESeq(dds_filt, parallel = TRUE)
+#dds_filt
+```
+
+Aplicando la función `results()` al objeto DESeqDataSet se obtienen los resultados en base a la etiqueta proporionada, entre ellos el logaritmo en base dos y el p-valor de la comparación entre los grupos a partir del test de Wald. También calcula el error estándar del log2 (lfcSE) y baseMean, que es la media de los valores de contaje de cada gen normalizados (baseMean). 
+
+En el caso de que no haya contaje para algún gen, no se computa ninguna de las variables mencionadas anteriormente y aparece como valor no disponible (NA). 
+
+Debido al gran número de genes en el análisis, `DESeq2` ejecuta un ajuste del p-valor por el método Benjamin-Hochnerg en el que el umbral de este p-valor ajustado hace referencia al porcentaje de falsos negativos positivos permitidos en el total de genes seleccionados como diferencialmente expresados. Por tanto, para un p-valor ajustado de 0.1 se espera encontrar hasta un 10% de falsos positivos en los genes seleccionados.
+
+### Genes diferenciados NIT vs. ELI
+
+```{r NITvsELI, echo=TRUE}
+NITvsELI <- results(dds_filt, contrast = c("Group", "NIT", "ELI"))
+summary(NITvsELI)
+```
+
+```{r NITvsELI_exprDiferencial}
+NITvsELIsig <- NITvsELI[which(NITvsELI$padj<0.1),]
+```
+
+
+```{r NITvsELI_resumen}
+Genes <-  sum(NITvsELI$padj < 0.1, na.rm = TRUE)
+p.01 <- sum(NITvsELIsig$pvalue<0.01, na.rm = TRUE)
+FP <- ceiling((sum(NITvsELI$padj < 0.1, na.rm = TRUE)*10/100))
+Under <- NITvsELIsig[which(NITvsELIsig$log2FoldChange<0),]
+Over <-NITvsELIsig[which(NITvsELIsig$log2FoldChange>0),]
+
+NITvsELIdf <- data.frame(NITvsELI=c(Genes, p.01, nrow(Under),
+                                    nrow(Over), FP), 
+                         row.names = c("Genes expr diferencial", "p-valor<0.01", "Sub-expresados",
+                                      "Sobre-expresados","max falsos positivos"))
+kable(NITvsELIdf, 
+      caption="Cuadro resumen comparación genes diferencialmente expresados entre grupo NIT y ELI. La primera fila indica el número total de genes con expresión diferencial (p-valor ajustado <0.1); la segunda fila indica el número de genes con un p-valor inferior a 0.01; las dos siguientes filas corresponden a los genes significantes con una fuerte sub y sobre expresión, respectivamente;  y la última fila, el número máximo de falsos positivos que podemos encontrar entre la selección de genes.",
+      row.names=TRUE)
+```
+
+Aparte de los p-valor ajustados, se tuvo en cuenta el log2FoldChange para evaluar la sub o sobre expresión de los genes diferencialmente expresados. 
+Según se definieron los niveles del factor grupo, contrastantdo NIT frente a ELI, los genes que presentan un log2FoldChange negativo están subexpresados en el grupo NIT con respecto al de ELI y sobreexpresados en caso de ser positivos. 
+
+A continuación se muestra los seis primeros genes diferencialmente sub y sobre-expresados con p-valor más pequeño.
+
+```{r NITvsELI_genes}
+NITvsELI_under <- Under[order(Under$pvalue),]
+cat("Genes sub-expresados")
+head(NITvsELI_under)
+NITvsELI_over <- Over[order(Over$pvalue),]
+cat("Genes sobre-expresados")
+head(NITvsELI_over)
+```
+=======
+```{r boxplot, fig.cap="Diagrama de cajas que muestran la distribución de los diferentes tipos de tejido. Se puede observar cierta heterogeneidad, sobretodo en la muestra 7 del tipo tisular NIT, pero no parece que sea sistemática ni que sea producido por muestras defectuosas."}
+require(reshape2)
+require(ggplot2)
+colores <- c(rep("yellow", 10), rep("blue", 10), rep("red", 10))
+df=melt(log2_count, variable.name = "Samples")
+df=data.frame(df, Condition=substr(df$Samples,1, 30))
+ggplot(df, aes(x=Samples, y =value, fill=Condition ))+
+  geom_boxplot()+
+  xlab("")+
+  ylab(expression(log[2](counts+1)))+
+  scale_fill_manual(values=colores)+
+  theme(legend.position = "none", axis.text = element_text(size = 5))
+```
+
+```{r boxplots, fig.cap="Diagrama de cajas que muestran la distribución de los diferentes tipos de tejido. Se puede observar cierta heterogeneidad, sobretodo en la muestra 7 del tipo tisular NIT, pero no parece que sea sistemática ni que sea producido por muestras defectuosas."}
+# 
+# par(mfrow=c(2,2))
+# boxplot(log2_count[, 1:10], col="green", main="Diagrama de cajas tejido NIT")
+# boxplot(log2_count[, 11:20], col="blue", main="Diagrama de cajas tejido ELI")
+# boxplot(log2_count[, 21:30], col="red", main="Diagrama de cajas tejido SFI")
+```
+
+
+
+>>>>>>> e1199583d165c298d039188b6aab6e3de1401838
+
+
+#### Anotación de los genes expresados genéticamente
+
+Con el fin de obtener el nombre de los genes seleccionados como diferencialmente expresados a partir del identificador de Ensembl, se empleó el paquete `AnnotationDbi`. Este paquete permite cargar los datos de anotación del genoma de *Homo sapiens*, buscar los identificadores de Ensembl y sus correspondientes nombres. 
+
+Con la función `mapIds` añadimos nuevas columnas a nuestra tabla de resultados. 
+
+```{r NITvsELIsig_mapIds, echo=TRUE}
+
+NITvsELIsig$symbol <- mapIds(org.Hs.eg.db,
+                             keys=row.names(NITvsELIsig),
+                             keytype = "ENSEMBL",
+                             column = "SYMBOL", 
+                             multiVals = "first")
+NITvsELIsig$entrez <- mapIds(org.Hs.eg.db,
+                             keys=row.names(NITvsELIsig),
+                             keytype = "ENSEMBL",
+                             column = "ENTREZID", 
+                             multiVals = "first")
+```
+
+Obtenemos la lista ordenada por p-valor de los genes expresados diferencialmente.
+
+```{r NITvsELIsig_ordered}
+NITvsELIsig_ann <- NITvsELIsig[order(NITvsELIsig$pvalue),]
+head(NITvsELIsig_ann)[,7:8]
+```
+
+
+#### Análisis de Significación Biológica
+
+Una vez anotados los genes seleccionados, se buscó su ginificación biológica empleando el paquete ènrichR`. Se eligió la base de datos Gene Ontology de procesos biológicos ya que nos ofrece una visión general de los procesos biológicos en los que puede estar implicado el gen.
+
+Buscaremos la significación biológica del gen más significativamente sobre expresado y el más sub expresado.
+
+```{r NITvsELIsig_bio}
+dbs <- listEnrichrDbs()
+dbs <- c("GO_Molecular_Function_2015", "GO_Cellular_Component_2015", "GO_Biological_Process_2015" , "ChEA_2016" ,"KEGG_2016")
+```
+```{r NITvsELIsig_biounder}
+#subexpresión
+Under <- NITvsELIsig_ann[which(NITvsELIsig$log2FoldChange<0),]
+Under <- Under[order(Under$log2FoldChange),]
+
+Under.1 <- enrichr(as.character(Under$symbol[1]), "GO_Biological_Process_2015")
+
+
+# print("Gen sub-expresado en NIT sobre ELI")
+Under.1 <- data.frame(Under.1)
+# as.character(Under$symbol[1])
+# Under.1[,1]
+kable(Under.1[,1], col.names =  as.character(Under$symbol[1]), caption="Gen sub-expresado en NIT sobre ELI")
+```
+
+
+```{r NITvsELIsig_bioover}
+#sobreexpresión
+Over <- NITvsELIsig_ann[which(NITvsELIsig$log2FoldChange>0),]
+Over <- Over[order(Over$log2FoldChange),]
+```
+
+```{r}
+Over.1 <- enrichr(as.character(Over$symbol[1]), "GO_Biological_Process_2015")
+
+```
+
+
+
+```{r}
+#print("Gen sobre-expresado en NIT sobre ELI")
+Over.1 <- data.frame(Over.1)
+# as.character(Over$symbol[1])
+# Over.1[,1]
+kable(Over.1[,1], col.names =  as.character(Over$symbol[1]), caption="Gen sobre-expresado en NIT sobre ELI")
+```
+
+
+### Genes diferenciados NIT vs. SFI
+
+```{r NITvsSFI, echo=TRUE}
+NITvsSFI <- results(dds_filt, contrast = c("Group", "NIT", "SFI"))
+summary(NITvsSFI)
+```
+
+
+```{r NITvsSFI_exprDiferencial}
+NITvsSFIsig <- NITvsSFI[which(NITvsSFI$padj<0.1),]
+```
+
+
+```{r NITvsSFI_resumen}
+Genes <-  sum(NITvsSFI$padj < 0.1, na.rm = TRUE)
+p.01 <- sum(NITvsSFIsig$pvalue<0.01, na.rm = TRUE)
+FP <- ceiling((sum(NITvsSFI$padj < 0.1, na.rm = TRUE)*10/100))
+Under <- NITvsSFIsig[which(NITvsSFIsig$log2FoldChange<0),]
+Over <-NITvsSFIsig[which(NITvsSFIsig$log2FoldChange>0),]
+NITvsSFIdf <- data.frame(NITvsSFI=c(Genes, p.01, nrow(Under), nrow(Over), FP), 
+                         row.names = c("Genes expr diferencial", "p-valor<0.01", "Sub-expresados", "Sobre-expresados","max falsos positivos"))
+kable(NITvsSFIdf, 
+      caption="Cuadro resumen comparación genes diferencialmente expresados entre grupo NIT y SFI. La primera fila indica el número total de genes con expresión diferencial (p-valor ajustado <0.1); la segunda fila indica el número de genes con un p-valor inferior a 0.01; las dos siguientes filas corresponden a los genes significantes con una fuerte sub y sobre expresión, respectivamente;  y la última fila, el número máximo de falsos positivos que podemos encontrar entre la selección de genes.",
+      row.names=TRUE)
+```
+
+
+
+```{r NITvsSFI_genes}
+NITvsSFI_under <- Under[order(Under$pvalue),]
+cat("Genes sub-expresados")
+head(NITvsSFI_under)
+NITvsSFI_over <- Over[order(Over$pvalue),]
+cat("Genes sobre-expresados")
+head(NITvsSFI_over)
+```
+
+#### Anotación de los genes expresados genéticamente
+
+
+```{r NITvsSFIsig_mapIds, echo=TRUE}
+require(AnnotationDbi)
+require(org.Hs.eg.db)
+NITvsSFIsig$symbol <- mapIds(org.Hs.eg.db,
+                             keys=row.names(NITvsSFIsig),
+                             keytype = "ENSEMBL",
+                             column = "SYMBOL", 
+                             multiVals = "first")
+NITvsSFIsig$entrez <- mapIds(org.Hs.eg.db,
+                             keys=row.names(NITvsSFIsig),
+                             keytype = "ENSEMBL",
+                             column = "ENTREZID", 
+                             multiVals = "first")
+```
+
+Obtenemos la lista ordenada por p-valor de los genes expresados diferencialmente.
+
+```{r NITvsSFIsig_ordered}
+NITvsSFIsig_ann <- NITvsSFIsig[order(NITvsSFIsig$pvalue),]
+head(NITvsSFIsig_ann)[,7:8]
+```
+
+
+#### Análisis de Significación Biológica
+
+```{r NITvsSFIsig_bio}
+require(enrichR)
+dbs <- listEnrichrDbs()
+dbs <- c("GO_Molecular_Function_2015", "GO_Cellular_Component_2015", "GO_Biological_Process_2015" , "ChEA_2016" ,"KEGG_2016")
+
+#subexpresión
+Under <- NITvsSFIsig_ann[which(NITvsSFIsig$log2FoldChange<0),]
+Under <- Under[order(Under$log2FoldChange),]
+
+Under.1 <- enrichr(as.character(Under$symbol[4]), "GO_Biological_Process_2015")
+
+
+#print("Gen sub-expresado en NIT sobre SFI")
+Under.1 <- data.frame(Under.1)
+# as.character(Under$symbol[4])
+# Under.1[,1]
+kable(Under.1[,1], col.names =  as.character(Under$symbol[4]), caption="Gen sub-expresado en NIT sobre SFI")
+```
+
+
+```{r}
+#sobreexpresión
+Over <- NITvsSFIsig_ann[which(NITvsSFIsig$log2FoldChange>0),]
+Over <- Over[order(Over$log2FoldChange),]
+
+Over.1 <- enrichr(as.character(Over$symbol[3]), "GO_Biological_Process_2015")
+
+#print("Gen sobre-expresado en NIT sobre SFI")
+Over.1 <- data.frame(Over.1)
+# as.character(Over$symbol[3])
+# Over.1[,1]
+kable(Over.1[,1], col.names =  as.character(Over$symbol[3]), caption="Gen sobre-expresado en NIT sobre SFI")
+```
+
+### Genes diferenciados ELI vs. SFI
+
+```{r ELIvsSFI, echo=TRUE}
+ELIvsSFI <- results(dds_filt, contrast = c("Group", "ELI", "SFI"))
+summary(ELIvsSFI)
+```
+
+```{r ELIvsSFI_exprDiferencial}
+ELIvsSFIsig <- ELIvsSFI[which(ELIvsSFI$padj<0.1),]
+```
+
+
+```{r ELIvsSFI_resumen}
+Genes <-  sum(ELIvsSFI$padj < 0.1, na.rm = TRUE)
+p.01 <- sum(ELIvsSFIsig$pvalue<0.01, na.rm = TRUE)
+FP <- ceiling((sum(ELIvsSFI$padj < 0.1, na.rm = TRUE)*10/100))
+Under <- ELIvsSFIsig[which(ELIvsSFIsig$log2FoldChange<0),]
+Over <-ELIvsSFIsig[which(ELIvsSFIsig$log2FoldChange>0),]
+ELIvsSFIdf <- data.frame(ELIvsSFI=c(Genes, p.01, nrow(Under), nrow(Over), FP), 
+                         row.names = c("Genes expr diferencial", "p-valor<0.01", "Sub-expresados", "Sobre-expresados","max falsos positivos"))
+kable(ELIvsSFIdf, 
+      caption="Cuadro resumen comparación genes diferencialmente expresados entre grupo NIT y SFI. La primera fila indica el número total de genes con expresión diferencial (p-valor ajustado <0.1); la segunda fila indica el número de genes con un p-valor inferior a 0.01; las dos siguientes filas corresponden a los genes significantes con una fuerte sub y sobre expresión, respectivamente;  y la última fila, el número máximo de falsos positivos que podemos encontrar entre la selección de genes.",
+      row.names=TRUE)
+```
+
+
+
+```{r ELIvsSFI_genes}
+ELIvsSFI_under <- Under[order(Under$pvalue),]
+cat("Genes sub-expresados")
+head(ELIvsSFI_under)
+ELIvsSFI_over <- Over[order(Over$pvalue),]
+cat("Genes sobre-expresados")
+head(ELIvsSFI_over)
+```
+
+
+#### Anotación de los genes expresados genéticamente
+
+
+```{r ELIvsSFIsig_mapIds, echo=TRUE}
+require(AnnotationDbi)
+require(org.Hs.eg.db)
+ELIvsSFIsig$symbol <- mapIds(org.Hs.eg.db,
+                             keys=row.names(ELIvsSFIsig),
+                             keytype = "ENSEMBL",
+                             column = "SYMBOL", 
+                             multiVals = "first")
+ELIvsSFIsig$entrez <- mapIds(org.Hs.eg.db,
+                             keys=row.names(ELIvsSFIsig),
+                             keytype = "ENSEMBL",
+                             column = "ENTREZID", 
+                             multiVals = "first")
+```
+
+Obtenemos la lista ordenada por p-valor de los genes expresados diferencialmente.
+
+```{r ELIvsSFIsig_ordered}
+ELIvsSFIsig_ann <- ELIvsSFIsig[order(ELIvsSFIsig$pvalue),]
+head(ELIvsSFIsig_ann)[,7:8]
+```
+#### Análisis de Significación Biológica
+
+```{r ELIvsSFIsig_bio}
+require(enrichR)
+dbs <- listEnrichrDbs()
+dbs <- c("GO_Molecular_Function_2015", "GO_Cellular_Component_2015", "GO_Biological_Process_2015" , "ChEA_2016" ,"KEGG_2016")
+
+#subexpresión
+Under <- ELIvsSFIsig_ann[which(ELIvsSFIsig$log2FoldChange<0),]
+Under <- Under[order(Under$log2FoldChange),]
+
+Under.1 <- enrichr(as.character(Under$symbol[1]), "GO_Biological_Process_2015")
+
+
+# print("Gen sub-expresado en ELI sobre SFI")
+Under.1 <- data.frame(Under.1)
+# as.character(Under$symbol[1])
+# Under.1[,1]
+kable(Under.1[,1], col.names =  as.character(Under$symbol[1]), caption="Gen sub-expresado en ELI sobre SFI")
+
+#sobreexpresión
+Over <- ELIvsSFIsig_ann[which(ELIvsSFIsig$log2FoldChange>0),]
+Over <- Over[order(Over$log2FoldChange),]
+
+Over.1 <- enrichr(as.character(Over$symbol[1]), "GO_Biological_Process_2015")
+
+# print("Gen sobre-expresado en ELI sobre SFI")
+Over.1 <- data.frame(Over.1)
+# as.character(Over$symbol[1])
+# Over.1[,1]
+kable(Over.1[,1], col.names =  as.character(Over$symbol[1]), caption="Gen sobre-expresado en ELI sobre SFI")
+```
+
+#Resumen de resultados
+
+Los controles de calidad llevados a cabo antes de comenzar el análisis, han asegurado una buena calidad de los datos de trabajo, a pesar de presentar ciertas problemáticas achacadas a fallos de manipulación de los datos.
+
+Tras el procesado de los datos, se han podido detectar una serie de genes diferencialmente expresados, como podemos ver en la tabla resumen
+
+```{r resumen}
+kable(cbind(NITvsELIdf,NITvsSFIdf, ELIvsSFIdf), caption = "Tabla resumen con el número de genes diferenciados en su expresión según las condiciones")
+```
+
+La siguiente tabla muestra la lista de todos los archivos de resultados generados durante el análisis y que pueden encontrarse en el repositorio [github](https://github.com/albamgarces/analisis-de-datos-de-RNA-seq.git).  
+
+
+
+```{r file_saving}
+#transformacion
+
+#filtrado
+#seleccion
+write.csv(as.data.frame(NITvsELI_under), file="./results/NITvsELIunder.csv")
+write.csv(as.data.frame(NITvsELI_over), file="./results/NITvsELIover.csv")
+write.csv(as.data.frame(NITvsSFI_over), file="./results/NITvsSFIover.csv")
+write.csv(as.data.frame(NITvsSFI_under), file="./results/NITvsSFIunder.csv")
+write.csv(as.data.frame(ELIvsSFI_over), file="./results/ELIvsSFIover.csv")
+write.csv(as.data.frame(ELIvsSFI_under), file="./results/ELIvsSFIunder.csv")
+#Anotación
+write.csv(as.data.frame(NITvsELIsig_ann), file="./results/NITvsELIsig_ann.csv")
+write.csv(as.data.frame(NITvsSFIsig_ann), file="./results/NITvsSFIsig_ann.csv")
+write.csv(as.data.frame(ELIvsSFIsig_ann), file="./results/ELIvsSFIsig_ann.csv")
+```
+
+```{r results_files}
+listOfFiles <- dir("./results/")
+kable(listOfFiles, col.names = "Archivos de resultados", caption="Listado de archivos de resultados generados en el presente análisis")
+```
+
+#Bibliografía
 Se realizó este análisis utilizando el lenguaje `r version$version.string` R en la interfaz RStudio versión 1.1.456 y las librerías desarrolaldas para este tipo de análisis por el proyecto Bioconductor.
 El programa estadístico R se puede descargar desde la página web del [proyecto CRAN](https://cran.r-project.org/index.html) (The Comprehensive R Archive Network) siguiendo las indicaciones.
 R-Studio puede descargarse desde su página web <https://www.rstudio.com/>.
